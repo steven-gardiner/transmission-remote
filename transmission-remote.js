@@ -151,7 +151,7 @@ module.exports = tremote.module = function() {
       });
   
       pSpec.opts = self.parser.parse();
-      console.error("PARSED: %j", pSpec);
+      console.error("PARSED: %j", pSpec.opts);
 
       pSpec.clientSpec = {};
       pSpec.clientSpec.host = pSpec.opts.host;
