@@ -149,8 +149,10 @@ module.exports = tremote.module = function() {
         "choices": tremote.schema.colnames,
         "default": tremote.schema.colnames.filter(function(x) { return tremote.schema.coldefs[x].sort; }),
       });
-  
-      pSpec.opts = self.parser.parse();
+
+      self.spec.cmd = self.spec.cmd || process.argv.slice(2);
+      self.spec.prefix = self.spec.prefix || [];
+      pSpec.opts = self.parser.parse(self.spec.prefix.concat(self.spec.cmd));
       console.error("PARSED: %j", pSpec.opts);
 
       pSpec.clientSpec = {};
