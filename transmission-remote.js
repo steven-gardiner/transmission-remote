@@ -105,6 +105,7 @@ process.on('parse', function(pSpec) {
   tremote.parser.option("host", {
     "abbr": "H",
     "position": 0,
+    "default": "localhost",
   });
   tremote.parser.option("port", {
     "abbr": "P",
@@ -155,6 +156,11 @@ process.on('parse', function(pSpec) {
   if (pSpec.opts.list) {
     pSpec.client.get(function(err, arg) {
 
+      if (err) {
+	console.error('ERROR %j', err);
+	return;
+      }
+	
       var lSpec = Object.create(pSpec);
       lSpec.torrents = arg.torrents;
 
