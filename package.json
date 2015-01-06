@@ -1,7 +1,8 @@
 {
   "name": "transmission-remote",
   "version": "0.0.1",
-  "dependencies": {
+  "main": "transmission-remote.js",
+    "dependencies": {
     "transmission": "*",
     "date-utils": "*",
     "sprintf": "*",
