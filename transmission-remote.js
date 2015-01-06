@@ -269,7 +269,9 @@ process.on('list', function(lSpec) {
 	human[datakey] = coldef.humanview.call(null, data[datakey], human) || data[datakey];
       }
       if (coldef && coldef.compactview && data[datakey]) {
-	compact[datakey] = coldef.compactview.call(null, data[datakey], compact) || data[datakey];
+	if (lSpec.opts.WIDTH < 50) {
+	  compact[datakey] = coldef.compactview.call(null, data[datakey], compact) || data[datakey];
+	}
       }
     });
     
