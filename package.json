@@ -1,0 +1,11 @@
+{
+  "name": "transmission-remote",
+  "version": "0.0.1",
+  "dependencies": {
+    "transmission": "*",
+    "date-utils": "*",
+    "sprintf": "*",
+    "object.assign": "*",
+    "nomnom": "*"
+  }  
+}
