@@ -153,8 +153,10 @@ module.exports = tremote.module = function() {
       self.spec.cmd = self.spec.cmd || process.argv.slice(2);
       self.spec.prefix = self.spec.prefix || [];
       pSpec.opts = self.parser.parse(self.spec.prefix.concat(self.spec.cmd));
-      console.error("PARSED: %j", pSpec.opts);
+      //console.error("PARSED: %j", pSpec.opts);
 
+      self.spec.eq.emit('opts', pSpec);
+      
       pSpec.clientSpec = {};
       pSpec.clientSpec.host = pSpec.opts.host;
       if (pSpec.opts.auth) {
