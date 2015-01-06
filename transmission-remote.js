@@ -183,6 +183,8 @@ module.exports = tremote.module = function() {
     });
 
     self.spec.eq.on('list', function(lSpec) {
+      lSpec.output = lSpec.output || process.stdout;
+
       self.procs.xmlify = tremote.mods.cp.spawn('bash', ['-c',
                                                          ['tee /tmp/tremote.xml',
                                                           'xmllint --format -',	 
@@ -263,57 +265,57 @@ module.exports = tremote.module = function() {
       self.procs.tabfix.stdout.pipe(self.procs.txtify.stdin);
       self.procs.tabfix.stderr.pipe(process.stderr);
 
-      self.procs.txtify.stdout.pipe(process.stdout);
+      self.procs.txtify.stdout.pipe(lSpec.output);
       self.procs.txtify.stderr.pipe(process.stderr);
   
-  self.procs.xmlify.stdin.write("<root>\n");
-  lSpec.torrents.forEach(function(torrent) {
-    var data = {};
-    var human = {};
-    var compact = {};
-    lSpec.opts.column.forEach(function(key) {
-      var datakey = key;
-      var coldef = tremote.schema.coldefs[key];
-      if (coldef && coldef.datakey) {
-	datakey = coldef.datakey;
-      }
-      data[datakey] = torrent[key];
-      if (coldef && coldef.humanview && data[datakey]) {
-	human[datakey] = coldef.humanview.call(null, data[datakey], human) || data[datakey];
-      }
-      if (coldef && coldef.compactview && data[datakey]) {
-	if (lSpec.opts.WIDTH < 50) {
-	  compact[datakey] = coldef.compactview.call(null, data[datakey], compact) || data[datakey];
-	}
-      }
-    });
+      self.procs.xmlify.stdin.write("<root>\n");
+      lSpec.torrents.forEach(function(torrent) {
+	var data = {};
+	var human = {};
+	var compact = {};
+	lSpec.opts.column.forEach(function(key) {
+	  var datakey = key;
+	  var coldef = tremote.schema.coldefs[key];
+	  if (coldef && coldef.datakey) {
+	    datakey = coldef.datakey;
+	  }
+	  data[datakey] = torrent[key];
+	  if (coldef && coldef.humanview && data[datakey]) {
+	    human[datakey] = coldef.humanview.call(null, data[datakey], human) || data[datakey];
+	  }
+	  if (coldef && coldef.compactview && data[datakey]) {
+	    if (lSpec.opts.WIDTH < 50) {
+	      compact[datakey] = coldef.compactview.call(null, data[datakey], compact) || data[datakey];
+	    }
+	  }
+      });
     
-    self.procs.xmlify.stdin.write("<torrent>\n");
-    self.procs.xmlify.stdin.write("<compact>\n");
-    for (key in compact) {
-      self.procs.xmlify.stdin.write("<" + key + ">");
-      self.procs.xmlify.stdin.write(("" + compact[key]));
-      self.procs.xmlify.stdin.write("</" + key + ">\n");	
-    }
-    self.procs.xmlify.stdin.write("</compact>\n");
-    self.procs.xmlify.stdin.write("<human>\n");
-    for (key in human) {
-      self.procs.xmlify.stdin.write("<" + key + ">");
-      self.procs.xmlify.stdin.write(("" + human[key]));
-      self.procs.xmlify.stdin.write("</" + key + ">\n");	
-    }
-    self.procs.xmlify.stdin.write("</human>\n");
-    self.procs.xmlify.stdin.write("<data>\n");
-    for (key in data) {
-      self.procs.xmlify.stdin.write("<" + key + ">");
-      self.procs.xmlify.stdin.write(("" + data[key]).trim());
-      self.procs.xmlify.stdin.write("</" + key + ">\n");	
-    }
-    self.procs.xmlify.stdin.write("</data>\n");
-    self.procs.xmlify.stdin.write("</torrent>\n");
-  });
-  self.procs.xmlify.stdin.write("</root>\n");
-  self.procs.xmlify.stdin.end();
+      self.procs.xmlify.stdin.write("<torrent>\n");
+      self.procs.xmlify.stdin.write("<compact>\n");
+      for (key in compact) {
+	self.procs.xmlify.stdin.write("<" + key + ">");
+	self.procs.xmlify.stdin.write(("" + compact[key]));
+	self.procs.xmlify.stdin.write("</" + key + ">\n");	
+      }
+      self.procs.xmlify.stdin.write("</compact>\n");
+      self.procs.xmlify.stdin.write("<human>\n");
+      for (key in human) {
+	self.procs.xmlify.stdin.write("<" + key + ">");
+	self.procs.xmlify.stdin.write(("" + human[key]));
+	self.procs.xmlify.stdin.write("</" + key + ">\n");	
+      }
+      self.procs.xmlify.stdin.write("</human>\n");
+      self.procs.xmlify.stdin.write("<data>\n");
+      for (key in data) {
+	self.procs.xmlify.stdin.write("<" + key + ">");
+	self.procs.xmlify.stdin.write(("" + data[key]).trim());
+	self.procs.xmlify.stdin.write("</" + key + ">\n");	
+      }
+      self.procs.xmlify.stdin.write("</data>\n");
+      self.procs.xmlify.stdin.write("</torrent>\n");
+	});
+      self.procs.xmlify.stdin.write("</root>\n");
+      self.procs.xmlify.stdin.end();
     });
     
     return self;
