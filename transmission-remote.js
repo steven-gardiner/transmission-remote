@@ -9,9 +9,6 @@ tremote.mods.date_utils = require('date-utils');
 tremote.mods.sprintf = require('sprintf');
 tremote.mods.assign = Object.assign || require('object.assign');
 
-tremote.parser = new tremote.mods.nomnom();
-
-tremote.procs = {};
 
 tremote.units = {};
 tremote.units.k = 1000;
@@ -101,161 +98,173 @@ tremote.schema.defineColumn('name', {
   },
 }); 
 
-process.on('parse', function(pSpec) {
-  pSpec = pSpec || {};
+module.exports = tremote.module = function() {
+  var me = {};
 
-  tremote.parser.option("host", {
-    "abbr": "H",
-    "position": 0,
-    "default": "localhost",
-  });
-  tremote.parser.option("port", {
-    "abbr": "P",
-    "position": 1,
-    "default": 9091
-  });
-  tremote.parser.option("auth", {
-    "abbr": "n",
-  });
-  tremote.parser.option("WIDTH", {
-    "abbr": "W",
-    default: process.stdout.columns || 120,
-  });
-  tremote.parser.option("list", {
-    "abbr": "l",
-    "flag": true,
-  });
-  tremote.parser.option("reverse", {
-    "flag": true,
-    "list": true,
-    default: [],
-  });
-  tremote.parser.option("column", {
-    "list": true,
-    "choices": tremote.schema.colnames,
-    "default": tremote.schema.colnames.filter(function(x) { return tremote.schema.coldefs[x].show; }),
-  });
-  tremote.parser.option("sortby", {
-    "list": true,
-    "choices": tremote.schema.colnames,
-    "default": tremote.schema.colnames.filter(function(x) { return tremote.schema.coldefs[x].sort; }),
-  });
+  me.TransmissionRemote = function(spec) {
+    var self = {};
+    self.spec = spec || {};
+    self.spec.eq = self.spec.eq || process;
 
+    self.parser = new tremote.mods.nomnom();
+    
+    self.procs = {};
+
+    self.spec.eq.on('parse', function(pSpec) {
+      pSpec = pSpec || {};
+
+      self.parser.option("host", {
+        "abbr": "H",
+        "position": 0,
+        "default": "localhost",
+      });
+      self.parser.option("port", {
+        "abbr": "P",
+        "position": 1,
+        "default": 9091
+      });
+      self.parser.option("auth", {
+        "abbr": "n",
+      });
+      self.parser.option("WIDTH", {
+        "abbr": "W",
+        default: process.stdout.columns || 120,
+      });
+      self.parser.option("list", {
+        "abbr": "l",
+        "flag": true,
+      });
+      self.parser.option("reverse", {
+        "flag": true,
+        "list": true,
+        default: [],
+      });
+      self.parser.option("column", {
+        "list": true,
+        "choices": tremote.schema.colnames,
+        "default": tremote.schema.colnames.filter(function(x) { return tremote.schema.coldefs[x].show; }),
+      });
+      self.parser.option("sortby", {
+        "list": true,
+        "choices": tremote.schema.colnames,
+        "default": tremote.schema.colnames.filter(function(x) { return tremote.schema.coldefs[x].sort; }),
+      });
   
-  pSpec.opts = tremote.parser.parse();
-  console.error("PARSED: %j", pSpec);
+      pSpec.opts = self.parser.parse();
+      console.error("PARSED: %j", pSpec);
 
-  pSpec.clientSpec = {};
-  pSpec.clientSpec.host = pSpec.opts.host;
-  if (pSpec.opts.auth) {
-    pSpec.opts.authParts = pSpec.opts.auth.split(/:/);
-    pSpec.clientSpec.username = pSpec.opts.authParts[0];
-    pSpec.clientSpec.password = pSpec.opts.authParts.slice(1).join(":");
-  }
-  
-  pSpec.client = new tremote.mods.transmission(pSpec.clientSpec);
-
-  if (pSpec.opts.list) {
-    pSpec.client.get(function(err, arg) {
-
-      if (err) {
-	console.error('ERROR %j', err);
-	return;
+      pSpec.clientSpec = {};
+      pSpec.clientSpec.host = pSpec.opts.host;
+      if (pSpec.opts.auth) {
+        pSpec.opts.authParts = pSpec.opts.auth.split(/:/);
+        pSpec.clientSpec.username = pSpec.opts.authParts[0];
+        pSpec.clientSpec.password = pSpec.opts.authParts.slice(1).join(":");
       }
-	
-      var lSpec = Object.create(pSpec);
-      lSpec.torrents = arg.torrents;
+  
+      pSpec.client = new tremote.mods.transmission(pSpec.clientSpec);
 
-      process.emit('list', lSpec);
+      if (pSpec.opts.list) {
+        pSpec.client.get(function(err, arg) {
+            
+          if (err) {
+            console.error('ERROR %j', err);
+            return;
+          }
+            
+          var lSpec = Object.create(pSpec);
+          lSpec.torrents = arg.torrents;
+          
+          self.spec.eq.emit('list', lSpec);
+        });
+      }
+
     });
-  }
-});
 
-process.on('list', function(lSpec) {    
-  tremote.procs.xmlify = tremote.mods.cp.spawn('bash', ['-c',
-							['tee /tmp/tremote.xml',
-							 'xmllint --format -',	 
-							 ].join(" | ")]);
-  tremote.procs.htmlify = tremote.mods.cp.spawn('xmlstarlet', ['sel',
-							       '--template',
-							       '--elem', 'table',
-							       '--match', '//torrent',
-							       ]
-						.concat(
-							lSpec.opts.sortby.reduce(function(accum, colname) {
-							  var reversed = lSpec.opts.reverse[accum.ix] || false;
-							  var coldef = tremote.schema.coldefs[colname];
-							  var list = [
-								      '--sort',
-								      [(! coldef.descending) != (! reversed) ? "A" : "D",
-								       coldef.sorttype,
-								       'L'
-								       ].join(":"),
-								      tremote.mods.sprintf('./data/%s', colname),
-								      ];
-							  
-							  console.error("SORTLIST %j", {colname:colname, list:list, accum:accum});
-							  return {ix:1+accum.ix,list:accum.list.concat(list)};
-							}, {ix:0, list:[]}).list
-							//'--sort', 'D:N:L', './data/percentDone',
-							//'--sort', 'A:T:L', './data/name',
-							//'--sort', 'A:N:L', './data/id',
-							)
-						.concat([
-							'--elem', 'tr'
-							 ])
-						.concat(
-							/*
-							  ["./data/id",
-							  "./human/percentDone",
-							  "./human/eta",
-							  "./data/name"
-							  ]
-							*/
-							lSpec.opts.column.map(function(colname) {
-							    var coldef = tremote.schema.coldefs[colname];
-							    coldef.xpath = coldef.xpath || tremote.mods.sprintf('(./compact/%s|./data/%s|./human/%s)[1]', colname, colname, colname);
-							    return coldef;
-							  })
-							.reduce(function(accum, coldef) {
-							    var list = [
-									'--elem', 'td',
-									'--attr', 'align',
-									'--output', coldef.align,
-									'--break',
-									'--value-of', coldef.xpath,
-									'--break',
-									];
-							    return accum.concat(list);
-							  }, [])));
+    self.spec.eq.on('list', function(lSpec) {
+      self.procs.xmlify = tremote.mods.cp.spawn('bash', ['-c',
+                                                         ['tee /tmp/tremote.xml',
+                                                          'xmllint --format -',	 
+                                                          ].join(" | ")]);
+      self.procs.htmlify = tremote.mods.cp.spawn('xmlstarlet', ['sel',
+                                                                '--template',
+                                                                '--elem', 'table',
+                                                                '--match', '//torrent',
+                                                                ]
+                                                 .concat(
+                                                         lSpec.opts.sortby.reduce(function(accum, colname) {
+                                                             var reversed = lSpec.opts.reverse[accum.ix] || false;
+                                                             var coldef = tremote.schema.coldefs[colname];
+                                                             var list = [
+                                                                         '--sort',
+                                                                         [(! coldef.descending) != (! reversed) ? "A" : "D",
+                                                                          coldef.sorttype,
+                                                                          'L'
+                                                                          ].join(":"),
+                                                                         tremote.mods.sprintf('./data/%s', colname),
+                                                                         ];
+                                                             
+                                                             console.error("SORTLIST %j", {colname:colname, list:list, accum:accum});
+                                                             return {ix:1+accum.ix,list:accum.list.concat(list)};
+                                                           }, {ix:0, list:[]}).list
+                                                         //'--sort', 'D:N:L', './data/percentDone',
+                                                         //'--sort', 'A:T:L', './data/name',
+                                                         //'--sort', 'A:N:L', './data/id',
+                                                         )
+                                                 .concat([
+                                                          '--elem', 'tr'
+                                                          ])
+                                                 .concat(
+                                                         /*
+                                                           ["./data/id",
+                                                           "./human/percentDone",
+                                                           "./human/eta",
+                                                           "./data/name"
+                                                           ]
+                                                         */
+                                                         lSpec.opts.column.map(function(colname) {
+                                                             var coldef = tremote.schema.coldefs[colname];
+                                                             coldef.xpath = coldef.xpath || tremote.mods.sprintf('(./compact/%s|./data/%s|./human/%s)[1]', colname, colname, colname);
+                                                             return coldef;
+                                                           })
+                                                         .reduce(function(accum, coldef) {
+                                                             var list = [
+                                                                         '--elem', 'td',
+                                                                         '--attr', 'align',
+                                                                         '--output', coldef.align,
+                                                                         '--break',
+                                                                         '--value-of', coldef.xpath,
+                                                                         '--break',
+                                                                         ];
+                                                             return accum.concat(list);
+                                                           }, [])));
+      
+      self.procs.tabfix = tremote.mods.cp.spawn('xmlstarlet', ['ed',
+                                                               '-O',
+                                                               '--insert', '//td', '--type', 'attr', '-n', 'valign', '--value', 'top',
+                                                               //'--insert', '//td', '--type', 'attr', '-n', 'align', '--value', 'right'
+                                                               ]);
+      
+      self.procs.txtify = tremote.mods.cp.spawn('bash', ['-c',
+                                                         [
+                                                          'tee /tmp/torrent.html',
+                                                          ['html2text', '-width', lSpec.opts.WIDTH
+                                                           ].join(" "),
+                                                          'tee /tmp/torrent.txt'
+                                                          ].join(" | ")]);
+      
+      self.procs.xmlify.stdout.pipe(self.procs.htmlify.stdin);
+      self.procs.xmlify.stderr.pipe(process.stderr);
+      
+      self.procs.htmlify.stdout.pipe(self.procs.tabfix.stdin);
+      self.procs.htmlify.stderr.pipe(process.stderr);
 
-  tremote.procs.tabfix = tremote.mods.cp.spawn('xmlstarlet', ['ed',
-							      '-O',
-							      '--insert', '//td', '--type', 'attr', '-n', 'valign', '--value', 'top',
-							      //'--insert', '//td', '--type', 'attr', '-n', 'align', '--value', 'right'
-							      ]);
+      self.procs.tabfix.stdout.pipe(self.procs.txtify.stdin);
+      self.procs.tabfix.stderr.pipe(process.stderr);
 
-  tremote.procs.txtify = tremote.mods.cp.spawn('bash', ['-c',
-							[
-							 'tee /tmp/torrent.html',
-							 ['html2text', '-width', lSpec.opts.WIDTH
-							  ].join(" "),
-							 'tee /tmp/torrent.txt'
-							 ].join(" | ")]);
+      self.procs.txtify.stdout.pipe(process.stdout);
+      self.procs.txtify.stderr.pipe(process.stderr);
   
-  tremote.procs.xmlify.stdout.pipe(tremote.procs.htmlify.stdin);
-  tremote.procs.xmlify.stderr.pipe(process.stderr);
-
-  tremote.procs.htmlify.stdout.pipe(tremote.procs.tabfix.stdin);
-  tremote.procs.htmlify.stderr.pipe(process.stderr);
-
-  tremote.procs.tabfix.stdout.pipe(tremote.procs.txtify.stdin);
-  tremote.procs.tabfix.stderr.pipe(process.stderr);
-
-  tremote.procs.txtify.stdout.pipe(process.stdout);
-  tremote.procs.txtify.stderr.pipe(process.stderr);
-  
-  tremote.procs.xmlify.stdin.write("<root>\n");
+  self.procs.xmlify.stdin.write("<root>\n");
   lSpec.torrents.forEach(function(torrent) {
     var data = {};
     var human = {};
@@ -277,32 +286,51 @@ process.on('list', function(lSpec) {
       }
     });
     
-    tremote.procs.xmlify.stdin.write("<torrent>\n");
-    tremote.procs.xmlify.stdin.write("<compact>\n");
+    self.procs.xmlify.stdin.write("<torrent>\n");
+    self.procs.xmlify.stdin.write("<compact>\n");
     for (key in compact) {
-      tremote.procs.xmlify.stdin.write("<" + key + ">");
-      tremote.procs.xmlify.stdin.write(("" + compact[key]));
-      tremote.procs.xmlify.stdin.write("</" + key + ">\n");	
+      self.procs.xmlify.stdin.write("<" + key + ">");
+      self.procs.xmlify.stdin.write(("" + compact[key]));
+      self.procs.xmlify.stdin.write("</" + key + ">\n");	
     }
-    tremote.procs.xmlify.stdin.write("</compact>\n");
-    tremote.procs.xmlify.stdin.write("<human>\n");
+    self.procs.xmlify.stdin.write("</compact>\n");
+    self.procs.xmlify.stdin.write("<human>\n");
     for (key in human) {
-      tremote.procs.xmlify.stdin.write("<" + key + ">");
-      tremote.procs.xmlify.stdin.write(("" + human[key]));
-      tremote.procs.xmlify.stdin.write("</" + key + ">\n");	
+      self.procs.xmlify.stdin.write("<" + key + ">");
+      self.procs.xmlify.stdin.write(("" + human[key]));
+      self.procs.xmlify.stdin.write("</" + key + ">\n");	
     }
-    tremote.procs.xmlify.stdin.write("</human>\n");
-    tremote.procs.xmlify.stdin.write("<data>\n");
+    self.procs.xmlify.stdin.write("</human>\n");
+    self.procs.xmlify.stdin.write("<data>\n");
     for (key in data) {
-      tremote.procs.xmlify.stdin.write("<" + key + ">");
-      tremote.procs.xmlify.stdin.write(("" + data[key]).trim());
-      tremote.procs.xmlify.stdin.write("</" + key + ">\n");	
+      self.procs.xmlify.stdin.write("<" + key + ">");
+      self.procs.xmlify.stdin.write(("" + data[key]).trim());
+      self.procs.xmlify.stdin.write("</" + key + ">\n");	
     }
-    tremote.procs.xmlify.stdin.write("</data>\n");
-    tremote.procs.xmlify.stdin.write("</torrent>\n");
+    self.procs.xmlify.stdin.write("</data>\n");
+    self.procs.xmlify.stdin.write("</torrent>\n");
   });
-  tremote.procs.xmlify.stdin.write("</root>\n");
-  tremote.procs.xmlify.stdin.end();
+  self.procs.xmlify.stdin.write("</root>\n");
+  self.procs.xmlify.stdin.end();
+    });
+    
+    return self;
+  };
+  
+  return me;  
+}();
+
+tremote.parser = new tremote.mods.nomnom();
+
+//self.procs = {};
+
+process.on('list', function(lSpec) {    
 });
 
-process.emit('parse');
+//process.emit('parse');
+
+if (module.parent) {
+} else {
+  var tr = new tremote.module.TransmissionRemote({eq:process});
+  process.emit('parse');
+}
