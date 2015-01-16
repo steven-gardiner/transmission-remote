@@ -8,5 +8,8 @@
     "sprintf": "*",
     "object.assign": "*",
     "nomnom": "*"
-  }  
+  },
+  "bin": {
+    "node-transmission-remote": "./transmission-remote.js"
+  }
 }

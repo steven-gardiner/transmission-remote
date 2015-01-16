@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 var tremote = {};
 
 tremote.mods = {};
@@ -134,6 +136,11 @@ module.exports = tremote.module = function() {
         "abbr": "l",
         "flag": true,
       });
+      self.parser.option("add", {
+        "abbr": "a",
+        "list": true,
+        default: [],
+      });
       self.parser.option("reverse", {
         "flag": true,
         "list": true,
@@ -167,24 +174,88 @@ module.exports = tremote.module = function() {
   
       pSpec.client = new tremote.mods.transmission(pSpec.clientSpec);
 
+      pSpec.actions = {};
+      pSpec.actions.adds = [];
+
+      pSpec.criteria = {}; // empty selector
+      
+      pSpec.opts.add.forEach(function(addendum) {
+	var action = {};
+	action.type = "add";
+	action.args = [addendum];
+	pSpec.actions.adds.push(action);
+      });
+
+      self.spec.eq.emit('add-torrents', pSpec);
+      return;
+      
       if (pSpec.opts.list) {
-        pSpec.client.get(function(err, arg) {
-            
-          if (err) {
-            console.error('ERROR %j', err);
-            return;
-          }
-            
-          var lSpec = Object.create(pSpec);
-          lSpec.torrents = arg.torrents;
-          
-          self.spec.eq.emit('list', lSpec);
-        });
       }
 
     });
 
-    self.spec.eq.on('list', function(lSpec) {
+    self.spec.eq.on('fetch-torrent-list', function(fSpec) {
+      fSpec.client.get(function(err, arg) {
+            
+        if (err) {
+	  console.error('ERROR %j', err);
+	  return;
+	}
+            
+	var qSpec = Object.create(fSpec || {});
+	qSpec.torrents = arg.torrents;
+          
+	self.spec.eq.emit('filter-torrent-list', qSpec);
+      });      
+    });
+
+    self.spec.eq.on('filter-torrent-list', function(qSpec) {
+      var pSpec = Object.create(qSpec || {});
+
+      console.error("FILTER: %j", qSpec.criteria);
+      
+      self.spec.eq.emit('print-torrent-list', pSpec);
+    });
+    
+    self.spec.eq.on('add-torrents', function(aSpec) {
+      var pSpec = Object.create(aSpec || {});
+
+      pSpec.newids = [];
+      pSpec.addChecklist = pSpec.actions.adds.reduce(function(accum,addendum) {
+	accum[addendum.args[0]] = {};
+	return accum;
+      }, {});
+      
+      pSpec.addWait = setInterval(function() {
+	if (Object.keys(pSpec.addChecklist).length) {
+	  console.error("UM %j", pSpec.addChecklist);
+	} else {
+	  console.error("UMM %j", pSpec.addChecklist);
+	  pSpec.criteria = { disjuncts: pSpec.newids.map(function(id) { return ["equals", "id", id]; }) };
+	  self.spec.eq.emit('fetch-torrent-list', pSpec);
+	  clearInterval(pSpec.addWait);
+	}
+      }, 100);
+      
+      pSpec.actions.adds.forEach(function(addendum) {
+	console.error("ADD: %j", addendum);
+
+	addendum.target = addendum.args[0];
+	pSpec.client.addFile(addendum.target, function(err, result) {
+	  delete pSpec.addChecklist[addendum.target];
+	    
+	  if (err) {
+	    console.error("ERROR %j", err);
+	    return;
+	  }
+
+	  pSpec.newids.push(result.id);
+	  console.error("OUTPUT: %j", {result:result,addendum:addendum});
+	});
+      });
+    });
+    
+    self.spec.eq.on('print-torrent-list', function(lSpec) {
       lSpec.output = lSpec.output || process.stdout;
 
       self.procs.xmlify = tremote.mods.cp.spawn('bash', ['-c',
